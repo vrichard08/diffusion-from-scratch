@@ -59,7 +59,7 @@ def train(batch_size: int=128,
             loss.backward()
             optimizer.step()
             ema.update(model)
-        print(f'Epoch {i+1} | Loss {total_loss / (len(train_loader)/batch_size):.5f}')
+        print(f'Epoch {i+1} | Loss {total_loss / len(train_loader)}')
 
     checkpoint = {
         'weights': model.state_dict(),
