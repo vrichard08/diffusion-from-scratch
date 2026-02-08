@@ -96,7 +96,7 @@ class Unet(nn.Module):
         self.downs = nn.ModuleList([Block(down_channels[i], down_channels[i+1],  time_emb_dim, use_attn=(i >= len(down_channels)-3)) 
                                     for i in range(len(down_channels)-1)])
 
-        self.ups = nn.ModuleList([Block(up_channels[i], up_channels[i+1], time_emb_dim, up=True, use_attn=(i < 1)) 
+        self.ups = nn.ModuleList([Block(up_channels[i], up_channels[i+1], time_emb_dim, up=True, use_attn=(i < 2)) 
                                   for i in range(len(up_channels)-1)])
         
 
