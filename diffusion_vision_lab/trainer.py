@@ -191,4 +191,3 @@ def train_latent_diffusion(
     
     return model, vae
 
-

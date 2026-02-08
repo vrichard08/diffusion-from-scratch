@@ -3,6 +3,7 @@ import torch
 from torch import nn
 import math
 from typing import Tuple
+from attention import SelfAttention, CrossAttention
 
 class Block(nn.Module):
     def __init__(self, in_ch, out_ch, time_emb_dim, up=False, use_attn=False):
@@ -18,7 +19,7 @@ class Block(nn.Module):
         self.gnorm1 = nn.GroupNorm(32, out_ch)
         self.gnorm2 = nn.GroupNorm(32, out_ch)
         self.relu  = nn.ReLU()
-        self.attn = SelfAttention(out_ch) if use_attn else nn.Identity()
+        self.attn = SelfAttention2D(out_ch) if use_attn else nn.Identity()
         
     def forward(self, x, t ):
 
@@ -51,30 +52,31 @@ class SinusoidalPositionEmbeddings(nn.Module):
 
         return embeddings
 
-class SelfAttention(nn.Module):
-    def __init__(self, ch):
+class SelfAttention2D(nn.Module):
+    def __init__(self, channels: int, n_heads: int = 8):
         super().__init__()
-        self.ch = ch
-        self.query = nn.Conv2d(ch, ch, 1)
-        self.key   = nn.Conv2d(ch, ch, 1)
-        self.value = nn.Conv2d(ch, ch, 1)
-        self.gamma = nn.Parameter(torch.zeros(1))
-        self.softmax = nn.Softmax(dim=-1)
         
+        self.groupnorm = nn.GroupNorm(32, channels, eps=1e-6)
+        self.conv_input = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+
+        self.layernorm_1 = nn.LayerNorm(channels)
+        self.attention_1 = SelfAttention(n_heads, channels, in_proj_bias=False)
+
+        self.conv_output = nn.Conv2d(channels, channels, kernel_size=1, padding=0)
+    
     def forward(self, x):
-        # x: [B, C, H, W]
-        B, C, H, W = x.shape
-        q = self.query(x).view(B, C, -1)          
-        k = self.key(x).view(B, C, -1)            
-        v = self.value(x).view(B, C, -1)          
-        
-        attn = torch.bmm(q.permute(0, 2, 1), k)   
-        attn = self.softmax(attn / (C ** 0.5))
-        
-        out = torch.bmm(v, attn.permute(0, 2, 1)) 
-        out = out.view(B, C, H, W)
-        
-        return self.gamma * out + x
+
+        residue_long = x
+        x = self.groupnorm(x)
+        x = self.conv_input(x)
+        n, c, h, w = x.shape
+        x = x.view((n, c, h * w)).transpose(-1, -2)
+        residue_short = x
+        x = self.layernorm_1(x)
+        x = self.attention_1(x)
+        x += residue_short
+        x = x.transpose(-1, -2).view((n, c, h, w))
+        return self.conv_output(x) + residue_long
 
 class Unet(nn.Module):
 
