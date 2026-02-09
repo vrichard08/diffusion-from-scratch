@@ -7,6 +7,7 @@ from timm.utils import ModelEmaV3
 from tqdm import tqdm
 from unet import Unet
 from vae import VAE
+from vae_plus import VAE as VAE_plus
 from dataset import CelebA
 from scheduler import DDPM_Scheduler
 
@@ -117,6 +118,52 @@ def train_vae(batch_size: int=128, img_size: int=64, num_epochs: int=20,
     
     return vae
 
+
+def train_vae_plus(batch_size: int=128, img_size: int=64, num_epochs: int=30, 
+              lr: float=1e-4, seed: int=42, beta: float=1.0):
+
+    set_seed(seed)
+    
+    train_dataset = CelebA.load_transformed_dataset(img_size)
+    train_loader = torch.utils.data.DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, 
+        drop_last=True, num_workers=4
+    )
+    
+    vae = VAE_plus().cuda()
+    optimizer = torch.optim.Adam(vae.parameters(), lr=lr)
+    
+    for epoch in range(num_epochs):
+        vae.train()
+        total_loss = 0
+        total_recon = 0
+        total_kld = 0
+        
+        for x, _ in tqdm(train_loader, desc=f"VAE Epoch {epoch+1}/{num_epochs}"):
+            x = x.cuda()
+            optimizer.zero_grad()
+            recon, mean, log_variance = vae(x)
+            loss, recon_loss, kld = VAE.vae_loss(recon, x, mean, log_variance, beta=beta)
+            loss.backward()
+            optimizer.step()
+            total_loss += loss.item()
+            total_recon += recon_loss.item()
+            total_kld += kld.item()
+        
+        avg_loss = total_loss / len(train_loader)
+        avg_recon = total_recon / len(train_loader)
+        avg_kld = total_kld / len(train_loader)
+        
+        print(f'VAE Epoch {epoch+1} | Loss: {avg_loss:.4f} | '
+              f'Recon: {avg_recon:.4f} | KLD: {avg_kld:.4f}')
+        
+        torch.save({
+            'model_state_dict': vae.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'epoch': epoch
+        }, 'vae_checkpoint.pt')
+    
+    return vae
 
 
 def train_latent_diffusion(
