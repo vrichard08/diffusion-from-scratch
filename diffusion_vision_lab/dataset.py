@@ -7,6 +7,7 @@ from pathlib import Path
 from PIL import Image
 import torchvision.transforms.functional as TF
 import random
+import numpy as np
 
 class BaseDataset(ABC):
     def __init__(self, data_path: str):
@@ -36,7 +37,7 @@ class CelebA(BaseDataset):
         return train_dataset
     
 
-class NYUDepthV2Dataset(torch.utils.data.Dataset):
+class NYUDepthV2TrainingDataset(torch.utils.data.Dataset):
 
     def __init__(
         self,
@@ -102,7 +103,79 @@ class NYUDepthV2Training(BaseDataset):
     @staticmethod
     def load_transformed_dataset(root_dir: str, size=(64, 64)):
         
-        return NYUDepthV2Dataset(root_dir, size)
+        return NYUDepthV2TrainingDataset(root_dir, size)
 
 
 
+class NYUDepthV2TestDataset(torch.utils.data.Dataset):
+    """
+    Expected structure:
+
+    root/
+        00000_colors.png
+        00000_depth.png
+        00001_colors.png
+        00001_depth.png
+        ...
+    """
+
+    def __init__(
+        self,
+        root_dir: str,
+        size: Tuple[int, int] = (64, 64),
+        normalize: bool = True,
+    ):
+        self.root = Path(root_dir)
+        self.size = size
+
+        self.samples = []
+
+        color_files = sorted(self.root.glob("*_colors.png"))
+
+        for color_path in color_files:
+            stem = color_path.stem.replace("_colors", "")
+            depth_path = self.root / f"{stem}_depth.png"
+
+            if depth_path.exists():
+                self.samples.append((color_path, depth_path))
+            else:
+                print(f"Warning: missing depth for {color_path}")
+
+        print(f"Found {len(self.samples)} test pairs")
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        rgb_path, depth_path = self.samples[idx]
+
+
+        rgb = Image.open(rgb_path).convert("RGB")
+        depth = Image.open(depth_path)
+
+        rgb = TF.resize(rgb, self.size)
+        depth = TF.resize(depth, self.size)
+    
+        rgb = TF.to_tensor(rgb)         
+        rgb = rgb * 2 - 1              
+    
+        depth = np.array(depth).astype(np.float32)  
+        depth /= 1000.0                            
+        depth = np.clip(depth, 0, 10.0)              
+        depth /= 10.0                          
+    
+        depth = torch.from_numpy(depth).unsqueeze(0) 
+        depth = depth * 2 - 1                        
+    
+        rgb_depth = torch.cat([rgb, depth], dim=0)    
+    
+        return rgb_depth
+    
+
+
+class NYUDepthV2Test(BaseDataset):
+
+    @staticmethod
+    def load_transformed_dataset(root_dir: str, size=(64, 64)):
+        
+        return NYUDepthV2TestDataset(root_dir, size)
