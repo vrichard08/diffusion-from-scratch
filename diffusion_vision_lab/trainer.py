@@ -8,7 +8,7 @@ from tqdm import tqdm
 from unet import Unet
 from vae import VAE
 from vae_plus import VAE as VAE_plus
-from dataset import CelebA
+from dataset import CelebA, NYUDepthV2Training
 from scheduler import DDPM_Scheduler
 
 def set_seed(seed: int = 42):
@@ -19,6 +19,59 @@ def set_seed(seed: int = 42):
     np.random.seed(seed)
     random.seed(seed)
 
+
+
+def train_monocular_depth(batch_size: int=64,
+          img_size: int=64,
+          num_time_steps: int=1000,
+          num_epochs: int=50,
+          seed: int=-1,
+          ema_decay: float=0.999,  
+          lr=1e-4,
+          checkpoint_path: str=None):
+    set_seed(random.randint(0, 2**32-1)) if seed == -1 else set_seed(seed)
+
+    train_dataset = NYUDepthV2Training('nyu_data/data/nyu2_train', size=(img_size,img_size))
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=True, drop_last=True, num_workers=4)
+
+    scheduler = DDPM_Scheduler(num_time_steps=num_time_steps)
+    scheduler.alpha = scheduler.alpha.cuda() 
+    model = Unet(input_dim=4,output_dim=1).cuda()
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
+    ema = ModelEmaV3(model, decay=ema_decay)
+    if checkpoint_path is not None:
+        checkpoint = torch.load(checkpoint_path)
+        model.load_state_dict(checkpoint['weights'])
+        ema.load_state_dict(checkpoint['ema'])
+        optimizer.load_state_dict(checkpoint['optimizer'])
+    criterion = torch.nn.MSELoss(reduction='mean')
+
+    for i in range(num_epochs):
+        total_loss = 0
+        for bidx, x in enumerate(tqdm(train_loader, desc=f"Epoch {i+1}/{num_epochs}")):
+            x = x.cuda()
+            rgb = x[:, :3, :, :]       
+            depth = x[:, 3:, :, :]
+            t = torch.randint(0,num_time_steps,(batch_size,)).cuda()
+            e = torch.randn_like(depth, requires_grad=False)
+            a = scheduler.alpha[t].view(batch_size,1,1,1)
+            depth_noisy = (torch.sqrt(a)*depth) + (torch.sqrt(1-a)*e)
+            x = torch.cat([rgb, depth_noisy], dim=1)
+            output = model(x, t)
+            optimizer.zero_grad()
+            loss = criterion(output, e)
+            total_loss += loss.item()
+            loss.backward()
+            optimizer.step()
+            ema.update(model)
+        print(f'Epoch {i+1} | Loss {total_loss / len(train_loader)}')
+
+    checkpoint = {
+        'weights': model.state_dict(),
+        'optimizer': optimizer.state_dict(),
+        'ema': ema.state_dict()
+    }
+    torch.save(checkpoint, 'ddpm_checkpoint_monocular_depth.pt')
 
 def train(batch_size: int=128,
           img_size: int=64,

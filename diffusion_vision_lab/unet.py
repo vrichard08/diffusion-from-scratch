@@ -83,7 +83,8 @@ class Unet(nn.Module):
     def __init__(self, 
                  down_channels: Tuple[int, ...] =(64, 128, 256, 512, 1024), 
                  up_channels: Tuple[int, ...] = (1024, 512, 256, 128, 64), 
-                 input_dim: int=3):
+                 input_dim: int=3,
+                 output_dim: int=3):
         super().__init__()
         time_emb_dim = 32
 
@@ -102,7 +103,7 @@ class Unet(nn.Module):
                                   for i in range(len(up_channels)-1)])
         
 
-        self.output = nn.Conv2d(up_channels[-1], input_dim, 1)
+        self.output = nn.Conv2d(up_channels[-1], output_dim, 1)
 
     def forward(self, x, timestep):
 
