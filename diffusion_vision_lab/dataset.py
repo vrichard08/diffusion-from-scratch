@@ -87,14 +87,8 @@ class NYUDepthV2TrainingDataset(torch.utils.data.Dataset):
             depth = TF.hflip(depth)
     
         rgb = TF.to_tensor(rgb)         
-        rgb = rgb * 2 - 1              
-    
-        depth = np.array(depth).astype(np.float32)  
-        depth /= 1000.0                            
-        depth = np.clip(depth, 0.1, 10.0)              
-        depth /= 10.0                          
-    
-        depth = torch.from_numpy(depth).unsqueeze(0) 
+        depth = TF.to_tensor(depth)  
+        rgb = rgb * 2 - 1   
         depth = depth * 2 - 1                        
     
         rgb_depth = torch.cat([rgb, depth], dim=0)    
