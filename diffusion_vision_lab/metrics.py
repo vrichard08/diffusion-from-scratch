@@ -24,7 +24,7 @@ def depth_metrics(pred, gt, eps=1e-6):
     rmse = torch.sqrt(torch.mean(diff ** 2))
 
     rmse_log = torch.sqrt(
-        torch.mean((torch.log(pred) - torch.log(gt)) ** 2)
+        torch.mean((torch.log10(pred) - torch.log10(gt)) ** 2)
     )
 
     abs_rel = torch.mean(torch.abs(diff) / gt)

@@ -5,6 +5,7 @@ import torch
 from typing import Tuple
 from pathlib import Path
 from PIL import Image
+import torchvision
 import torchvision.transforms.functional as TF
 import random
 import numpy as np
@@ -79,7 +80,7 @@ class NYUDepthV2TrainingDataset(torch.utils.data.Dataset):
         depth = Image.open(depth_path)
 
         rgb = TF.resize(rgb, self.size)
-        depth = TF.resize(depth, self.size)
+        depth = TF.resize(depth, self.size, interpolation=torchvision.transforms.InterpolationMode.NEAREST)
 
         if random.random() < 0.3:
             rgb = TF.hflip(rgb)
@@ -90,7 +91,7 @@ class NYUDepthV2TrainingDataset(torch.utils.data.Dataset):
     
         depth = np.array(depth).astype(np.float32)  
         depth /= 1000.0                            
-        depth = np.clip(depth, 0, 10.0)              
+        depth = np.clip(depth, 0.1, 10.0)              
         depth /= 10.0                          
     
         depth = torch.from_numpy(depth).unsqueeze(0) 
@@ -165,7 +166,7 @@ class NYUDepthV2TestDataset(torch.utils.data.Dataset):
     
         depth = np.array(depth).astype(np.float32)  
         depth /= 1000.0                            
-        depth = np.clip(depth, 0, 10.0)              
+        depth = np.clip(depth, 0.1, 10.0)              
         depth /= 10.0                          
     
         depth = torch.from_numpy(depth).unsqueeze(0) 
