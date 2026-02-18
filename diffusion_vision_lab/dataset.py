@@ -84,15 +84,19 @@ class NYUDepthV2TrainingDataset(torch.utils.data.Dataset):
         if random.random() < 0.3:
             rgb = TF.hflip(rgb)
             depth = TF.hflip(depth)
-
-        
-        rgb = TF.to_tensor(rgb)
-        depth = TF.to_tensor(depth)
-
-        rgb = rgb * 2.0 - 1.0       
-        depth = depth * 2.0 - 1.0   
-
-        rgb_depth = torch.cat([rgb, depth], dim=0)  
+    
+        rgb = TF.to_tensor(rgb)         
+        rgb = rgb * 2 - 1              
+    
+        depth = np.array(depth).astype(np.float32)  
+        depth /= 1000.0                            
+        depth = np.clip(depth, 0, 10.0)              
+        depth /= 10.0                          
+    
+        depth = torch.from_numpy(depth).unsqueeze(0) 
+        depth = depth * 2 - 1                        
+    
+        rgb_depth = torch.cat([rgb, depth], dim=0)    
 
         return rgb_depth
     
