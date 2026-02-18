@@ -58,6 +58,32 @@ def inference(checkpoint_path: str=None,
         display_reverse(images)
 
 
+def inference_ddim(checkpoint_path: str=None,
+              num_time_steps: int=1000,
+              ema_decay: float=0.999, ):
+    checkpoint = torch.load(checkpoint_path)
+    model = Unet().cuda()
+    model.load_state_dict(checkpoint['weights'])
+    ema = ModelEmaV3(model, decay=ema_decay)
+    ema.load_state_dict(checkpoint['ema'])
+    scheduler = DDPM_Scheduler(num_time_steps=num_time_steps)
+    times = [0,15,50,100,200,300,400,550,700,999]
+    images = []
+
+    with torch.no_grad():
+        model = ema.module.eval()
+        x = torch.randn(1, 3, 64, 64)
+        for t in reversed(range(1, num_time_steps)):    
+            t = [t]
+            eps = model(x.cuda(), torch.tensor(t).cuda())
+            x_0 = (x - torch.sqrt(1-scheduler.alpha[t])*eps ) / torch.sqrt(scheduler.alpha[t])
+            x = torch.sqrt(scheduler.alpha[t-1])*x_0 + torch.sqrt(1 - scheduler.alpha[t-1])*eps
+           
+            if t[0] in times:
+                images.append(x)
+           
+        images.append(x)
+        display_reverse(images)
 
 
 
@@ -115,8 +141,6 @@ def inference_latent_diffusion(
     return images
 
 
-
-
 def inference_monocular_depth(
     image: torch.Tensor,
     diffusion_checkpoint: str='ddpm_checkpoint_monocular_depth.pt',
@@ -161,3 +185,46 @@ def inference_monocular_depth(
         display_reverse(images)
     
     return images
+
+
+def inference_ddim_monocular_depth(
+    image: torch.Tensor,
+    diffusion_checkpoint: str='ddpm_checkpoint_monocular_depth.pt',
+    num_time_steps: int=1000,
+    ema_decay: float=0.999
+):
+
+    checkpoint = torch.load(diffusion_checkpoint)
+    model = Unet(input_dim=4,output_dim=1).cuda()
+    model.load_state_dict(checkpoint['weights'])
+    ema = ModelEmaV3(model, decay=ema_decay)
+    ema.load_state_dict(checkpoint['ema'])
+    model.eval()
+    
+    scheduler = DDPM_Scheduler(num_time_steps=num_time_steps)
+    scheduler.alpha = scheduler.alpha.cuda()
+    scheduler.beta = scheduler.beta.cuda()
+    
+    times = [0, 15, 50, 100, 200, 300, 400, 550, 700, 999]
+    images = []
+    
+    with torch.no_grad():
+        model = ema.module.eval()
+        rgb = image.cuda()                        
+        depth = torch.randn(1, 1, 64, 64).cuda() 
+        for t in reversed(range(1, num_time_steps)):
+            t_tensor = torch.tensor([t]).cuda()
+            model_in = torch.cat([rgb, depth], dim=1)
+            eps = model(model_in, t_tensor)
+            x_0 = (depth - torch.sqrt(1-scheduler.alpha[t])*eps ) / torch.sqrt(scheduler.alpha[t])
+            depth = torch.sqrt(scheduler.alpha[t-1])*x_0 + torch.sqrt(1 - scheduler.alpha[t-1])*eps
+
+            if t in times:
+                images.append(depth.clone())
+
+        images.append(depth)
+        display_reverse(images)
+    
+    return images
+
+
