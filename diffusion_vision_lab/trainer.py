@@ -10,6 +10,7 @@ from vae import VAE
 from vae_plus import VAE as VAE_plus
 from dataset import CelebA, NYUDepthV2Training
 from scheduler import DDPM_Scheduler
+from utilities import get_v_target
 
 def set_seed(seed: int = 42):
     torch.manual_seed(seed)
@@ -108,7 +109,8 @@ def train(batch_size: int=128,
             x = (torch.sqrt(a)*x) + (torch.sqrt(1-a)*e)
             output = model(x, t)
             optimizer.zero_grad()
-            loss = criterion(output, e)
+            v = get_v_target(x, e, scheduler.alpha)
+            loss = criterion(output, v)
             total_loss += loss.item()
             loss.backward()
             optimizer.step()
